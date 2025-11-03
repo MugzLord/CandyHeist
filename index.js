@@ -276,72 +276,76 @@ if (i.isUserSelectMenu()) {
   }
 
   // 💀 HEIST select
-// 💀 HEIST select
-if (i.customId === "heist_select") {
-  const actor = getUser(actorId);
-  const target = getUser(selectedId);
-
-  // 1) check lock
-  if (isLocked(selectedId)) {
-    const line = getBanter("mug_fail");
-    await i.update({ content: `${line} (they locked their stocking)`, components: [] });
+  if (i.customId === "heist_select") {
+    const actorId = i.user.id;
+    const targetId = i.values[0];
+  
+    const actorData = getUser(actorId);
+    const targetData = getUser(targetId);
+  
+    // if target is locked, stop
+    if (isLocked(targetId)) {
+      const line = getBanter("mug_fail");
+      await i.update({
+        content: `${line} (they locked their stocking)`,
+        components: []
+      });
+      return;
+    }
+  
+    // 70% success if target has candy
+    const success = Math.random() < 0.7 && (targetData.candy || 0) > 0;
+  
+    if (success) {
+      const stolen = Math.max(1, Math.floor(targetData.candy * 0.25));
+      addCandy(targetId, -stolen);
+      addCandy(actorId, stolen);
+      const line = getBanter("mug_success");
+  
+      // tell the attacker
+      await i.update({
+        content: `${line}\nYou stole **${stolen}** 🍬 from <@${targetId}>`,
+        components: []
+      });
+  
+      // DM the victim if they didn't opt out
+      const db = readDB();
+      const victimData = db.users[targetId];
+      const guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
+      if (guild) {
+        const member = await guild.members.fetch(targetId).catch(() => null);
+        if (member && !(victimData && victimData.nudgeOptOut)) {
+          await member
+            .send(
+              `💀 You were hit in **The Candy Heist** by <@${actorId}> and lost **${stolen}** 🍬`
+            )
+            .catch(() => {});
+        }
+      }
+  
+      // (optional) announce in event channel
+      if (process.env.EVENT_CHANNEL_ID) {
+        const chan = await client.channels
+          .fetch(process.env.EVENT_CHANNEL_ID)
+          .catch(() => null);
+        if (chan) {
+          await chan.send(
+            `💀 <@${actorId}> just heisted <@${targetId}> for **${stolen}** 🍬!`
+          );
+        }
+      }
+    } else {
+      // failed heist
+      addCandy(actorId, -5);
+      const line = getBanter("mug_fail");
+      await i.update({
+        content: `${line}\nYou lost **5** 🍬`,
+        components: []
+      });
+    }
+  
     return;
   }
-
-  // 2) success / fail
-  const success = Math.random() < 0.7 && (target.candy || 0) > 0;
-  if (success) {
-    const stolen = Math.max(1, Math.floor(target.candy * 0.25));
-    addCandy(selectedId, -stolen);
-    addCandy(actorId, stolen);
-    const line = getBanter("mug_success");
-
-    // tell the attacker (same as before)
-    await i.update({
-      content: `${line}\nYou stole **${stolen}** 🍬 from <@${selectedId}>`,
-      components: []
-    });
-
-    // 3a) DM the victim (if they didn't opt out)
-    try {
-      const db = readDB();
-      const victimData = db.users[selectedId];
-      const guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
-      const member = guild ? await guild.members.fetch(selectedId).catch(() => null) : null;
-
-      // if they didn't turn off Xmas DMs, tell them
-      if (member && !(victimData && victimData.nudgeOptOut)) {
-        await member.send(
-          `💀 You were hit in **The Candy Heist** by <@${actorId}> and lost **${stolen}** 🍬`
-        ).catch(() => {});
-      }
-    } catch (e) {
-      // ignore DM errors
-    }
-
-    // 3b) (optional) announce in event channel
-    if (process.env.EVENT_CHANNEL_ID) {
-      const chan = await client.channels.fetch(process.env.EVENT_CHANNEL_ID).catch(() => null);
-      if (chan) {
-        await chan.send(
-          `💀 <@${actorId}> just heisted <@${selectedId}> for **${stolen}** 🍬!`
-        );
-      }
-    }
-
-  } else {
-    // heist failed
-    addCandy(actorId, -5);
-    const line = getBanter("mug_fail");
-    await i.update({
-      content: `${line}\nYou lost **5** 🍬`,
-      components: []
-    });
-  }
-
-  return;
-}
-
 
   // ❄️ SNOWBALL select
   if (i.customId === "snowball_select") {
@@ -362,8 +366,7 @@ if (i.customId === "heist_select") {
 }
 
 
-  // modal submits
-  // modal submits
+   // modal submits
   if (i.isModalSubmit()) {
     // this modal is shown AFTER the user picks someone to gift
     if (i.customId.startsWith("modal_gift_amount:")) {
