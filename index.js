@@ -245,19 +245,39 @@ client.on("interactionCreate", async (i) => {
 
 // --- COMMAND REGISTRATION ---
 const rest = new REST({ version: "10" }).setToken(TOKEN);
+
 async function registerCommands() {
   const commands = [
     { name: "xmas", description: "Open The Candy Heist panel" },
     { name: "xmas_admin", description: "(staff) view active Candy Heist players" }
   ];
-  await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-  console.log("✅ Slash commands registered");
+
+  try {
+    if (GUILD_ID) {
+      // fast guild-only commands
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+      );
+      console.log("✅ Registered guild commands to", GUILD_ID);
+    } else {
+      // fallback: global (slower to appear)
+      await rest.put(
+        Routes.applicationCommands(CLIENT_ID),
+        { body: commands }
+      );
+      console.log("✅ Registered global commands");
+    }
+  } catch (err) {
+    console.error("❌ Failed to register slash commands:", err.rawError || err);
+    // don't crash the bot
+  }
 }
 
-// --- READY ---
 client.once("ready", async () => {
   console.log(`🎄 Logged in as ${client.user.tag}`);
   await registerCommands();
 });
+
 
 client.login(TOKEN);
