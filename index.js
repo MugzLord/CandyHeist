@@ -33,10 +33,21 @@ const ADMIN_ROLE_ID = process.env.ADMIN_ROLE_ID || null;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "db.json");
 const BANTER_PATH = path.join(__dirname, "banter.json");
 
+// ✅ ensure directory exists (fixes ENOENT on /data/db.json)
+const dbDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
 // --- INIT FILES ---
-if (!fs.existsSync(DB_PATH))
-  fs.writeFileSync(DB_PATH, JSON.stringify({ users: {}, banter_state: {} }, null, 2));
+if (!fs.existsSync(DB_PATH)) {
+  fs.writeFileSync(
+    DB_PATH,
+    JSON.stringify({ users: {}, banter_state: {} }, null, 2)
+  );
+}
 const banter = JSON.parse(fs.readFileSync(BANTER_PATH, "utf-8"));
+
 
 // --- DB HELPERS ---
 function readDB() {
