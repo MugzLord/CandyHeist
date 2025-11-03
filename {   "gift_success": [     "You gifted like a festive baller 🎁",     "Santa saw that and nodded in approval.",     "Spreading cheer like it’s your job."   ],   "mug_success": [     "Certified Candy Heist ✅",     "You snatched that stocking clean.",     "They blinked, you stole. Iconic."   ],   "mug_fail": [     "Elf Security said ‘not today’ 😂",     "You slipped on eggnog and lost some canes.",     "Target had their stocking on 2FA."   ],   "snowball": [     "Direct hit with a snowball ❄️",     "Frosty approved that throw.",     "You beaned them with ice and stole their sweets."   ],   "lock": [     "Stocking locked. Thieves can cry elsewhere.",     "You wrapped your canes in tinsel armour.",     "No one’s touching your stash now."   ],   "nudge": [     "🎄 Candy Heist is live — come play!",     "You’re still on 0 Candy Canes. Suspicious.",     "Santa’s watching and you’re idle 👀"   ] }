@@ -1,0 +1,32 @@
+{
+  "gift_success": [
+    "You gifted like a festive baller 🎁",
+    "Santa saw that and nodded in approval.",
+    "Spreading cheer like it’s your job."
+  ],
+  "mug_success": [
+    "Certified Candy Heist ✅",
+    "You snatched that stocking clean.",
+    "They blinked, you stole. Iconic."
+  ],
+  "mug_fail": [
+    "Elf Security said ‘not today’ 😂",
+    "You slipped on eggnog and lost some canes.",
+    "Target had their stocking on 2FA."
+  ],
+  "snowball": [
+    "Direct hit with a snowball ❄️",
+    "Frosty approved that throw.",
+    "You beaned them with ice and stole their sweets."
+  ],
+  "lock": [
+    "Stocking locked. Thieves can cry elsewhere.",
+    "You wrapped your canes in tinsel armour.",
+    "No one’s touching your stash now."
+  ],
+  "nudge": [
+    "🎄 Candy Heist is live — come play!",
+    "You’re still on 0 Candy Canes. Suspicious.",
+    "Santa’s watching and you’re idle 👀"
+  ]
+}
