@@ -15,7 +15,8 @@ import {
   ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  UserSelectMenuBuilder
 } from "discord.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -172,18 +173,70 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // buttons
-  if (i.isButton()) {
-    const id = i.customId;
-    if (id === "gift") return i.showModal(giftModal());
-    if (id === "heist") return i.showModal(heistModal());
-    if (id === "snowball") return i.showModal(snowballModal());
-    if (id === "lock") {
-      const until = new Date(Date.now() + 15 * 60000).toISOString();
-      setUser(i.user.id, { lockedUntil: until });
-      const msg = `${getBanter("lock")} (15 mins)`;
-      return i.reply({ content: msg, ephemeral: true });
-    }
+if (i.isButton()) {
+  const id = i.customId;
+
+  // 🎁 GIFT → user select
+  if (id === "gift") {
+    const row = new ActionRowBuilder().addComponents(
+      new UserSelectMenuBuilder()
+        .setCustomId("gift_select")
+        .setPlaceholder("Select someone to gift")
+        .setMinValues(1)
+        .setMaxValues(1)
+    );
+    await i.reply({
+      content: "Who do you want to gift? 🎁",
+      components: [row],
+      ephemeral: true
+    });
+    return;
+  }
+
+  // 💀 HEIST → user select
+  if (id === "heist") {
+    const row = new ActionRowBuilder().addComponents(
+      new UserSelectMenuBuilder()
+        .setCustomId("heist_select")
+        .setPlaceholder("Select a player to heist")
+        .setMinValues(1)
+        .setMaxValues(1)
+    );
+    await i.reply({
+      content: "Pick someone to rob 👀",
+      components: [row],
+      ephemeral: true
+    });
+    return;
+  }
+
+  // ❄️ SNOWBALL → user select
+  if (id === "snowball") {
+    const row = new ActionRowBuilder().addComponents(
+      new UserSelectMenuBuilder()
+        .setCustomId("snowball_select")
+        .setPlaceholder("Select a player to snowball")
+        .setMinValues(1)
+        .setMaxValues(1)
+    );
+    await i.reply({
+      content: "Pick a target to snowball ❄️",
+      components: [row],
+      ephemeral: true
+    });
+    return;
+  }
+
+  // 🔒 lock stays the same
+  if (id === "lock") {
+    const until = new Date(Date.now() + 15 * 60000).toISOString();
+    setUser(i.user.id, { lockedUntil: until });
+    const msg = `${getBanter("lock")} (15 mins)`;
+    await i.reply({ content: msg, ephemeral: true });
+    return;
+  }
+
+  
     if (id === "leaderboard") {
       const data = readDB();
       const list = Object.entries(data.users)
@@ -197,40 +250,146 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // modal submits
-  if (i.isModalSubmit()) {
-    const targetRaw = i.fields.getTextInputValue("target");
-    const targetId = targetRaw.replace(/[<@!>]/g, "");
-    const uID = i.user.id;
-    if (i.customId === "modal_gift") {
-      const amt = parseInt(i.fields.getTextInputValue("amount"), 10) || 0;
-      const giver = getUser(uID);
-      if (giver.candy < amt) return i.reply({ content: "Not enough 🍬", ephemeral: true });
-      addCandy(uID, -amt);
-      addCandy(targetId, amt);
-      const msg = `${getBanter("gift_success")}\nYou gave <@${targetId}> **${amt}** 🍬`;
-      return i.reply(msg);
+  // user selects for actions
+if (i.isUserSelectMenu()) {
+  const selectedId = i.values[0];
+  const actorId = i.user.id;
+
+  // 🎁 GIFT select
+  if (i.customId === "gift_select") {
+    // after picking the user, we still need the amount
+    // so show a tiny modal asking for amount
+    const modal = new ModalBuilder()
+      .setCustomId(`modal_gift_amount:${selectedId}`)
+      .setTitle("🎁 Gift amount")
+      .addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("amount")
+            .setLabel("How many Candy Canes?")
+            .setStyle(TextInputStyle.Short)
+            .setValue("10")
+        )
+      );
+    await i.showModal(modal);
+    return;
+  }
+
+  // 💀 HEIST select
+// 💀 HEIST select
+if (i.customId === "heist_select") {
+  const actor = getUser(actorId);
+  const target = getUser(selectedId);
+
+  // 1) check lock
+  if (isLocked(selectedId)) {
+    const line = getBanter("mug_fail");
+    await i.update({ content: `${line} (they locked their stocking)`, components: [] });
+    return;
+  }
+
+  // 2) success / fail
+  const success = Math.random() < 0.7 && (target.candy || 0) > 0;
+  if (success) {
+    const stolen = Math.max(1, Math.floor(target.candy * 0.25));
+    addCandy(selectedId, -stolen);
+    addCandy(actorId, stolen);
+    const line = getBanter("mug_success");
+
+    // tell the attacker (same as before)
+    await i.update({
+      content: `${line}\nYou stole **${stolen}** 🍬 from <@${selectedId}>`,
+      components: []
+    });
+
+    // 3a) DM the victim (if they didn't opt out)
+    try {
+      const db = readDB();
+      const victimData = db.users[selectedId];
+      const guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
+      const member = guild ? await guild.members.fetch(selectedId).catch(() => null) : null;
+
+      // if they didn't turn off Xmas DMs, tell them
+      if (member && !(victimData && victimData.nudgeOptOut)) {
+        await member.send(
+          `💀 You were hit in **The Candy Heist** by <@${actorId}> and lost **${stolen}** 🍬`
+        ).catch(() => {});
+      }
+    } catch (e) {
+      // ignore DM errors
     }
-    if (i.customId === "modal_heist") {
-      const target = getUser(targetId);
-      if (isLocked(targetId)) return i.reply({ content: `${getBanter("mug_fail")} (locked)`, ephemeral: true });
-      const success = Math.random() < 0.7 && (target.candy || 0) > 0;
-      if (success) {
-        const stolen = Math.max(1, Math.floor(target.candy * 0.25));
-        addCandy(targetId, -stolen);
-        addCandy(uID, stolen);
-        const msg = `${getBanter("mug_success")}\nYou stole **${stolen}** 🍬 from <@${targetId}>`;
-        return i.reply(msg);
-      } else {
-        addCandy(uID, -5);
-        const msg = `${getBanter("mug_fail")}\nYou lost **5** 🍬`;
-        return i.reply(msg);
+
+    // 3b) (optional) announce in event channel
+    if (process.env.EVENT_CHANNEL_ID) {
+      const chan = await client.channels.fetch(process.env.EVENT_CHANNEL_ID).catch(() => null);
+      if (chan) {
+        await chan.send(
+          `💀 <@${actorId}> just heisted <@${selectedId}> for **${stolen}** 🍬!`
+        );
       }
     }
-    if (i.customId === "modal_snowball") {
-      const t = getUser(targetId);
-      const hit = Math.random() < 0.5 && (t.candy || 0) > 0 && !isLocked(targetId);
-      if (hit) {
+
+  } else {
+    // heist failed
+    addCandy(actorId, -5);
+    const line = getBanter("mug_fail");
+    await i.update({
+      content: `${line}\nYou lost **5** 🍬`,
+      components: []
+    });
+  }
+
+  return;
+}
+
+
+  // ❄️ SNOWBALL select
+  if (i.customId === "snowball_select") {
+    const target = getUser(selectedId);
+    const hit = Math.random() < 0.5 && (target.candy || 0) > 0 && !isLocked(selectedId);
+
+    if (hit) {
+      const stolen = Math.min(target.candy, Math.floor(Math.random() * 4) + 2); // 2-5
+      addCandy(selectedId, -stolen);
+      addCandy(actorId, stolen);
+      const line = getBanter("snowball");
+      await i.update({ content: `${line}\nYou knocked **${stolen}** 🍬 off <@${selectedId}>`, components: [] });
+    } else {
+      await i.update({ content: "Your snowball missed and hit a reindeer 🦌", components: [] });
+    }
+    return;
+  }
+}
+
+
+  // modal submits
+  // modal submits
+  if (i.isModalSubmit()) {
+    // this modal is shown AFTER the user picks someone to gift
+    if (i.customId.startsWith("modal_gift_amount:")) {
+      const targetId = i.customId.split(":")[1];  // we encoded it in the customId
+      const amt = parseInt(i.fields.getTextInputValue("amount"), 10) || 0;
+      const giverId = i.user.id;
+      const giver = getUser(giverId);
+  
+      if (amt <= 0) {
+        await i.reply({ content: "Amount must be positive.", ephemeral: true });
+        return;
+      }
+  
+      if ((giver.candy || 0) < amt) {
+        await i.reply({ content: "Not enough Candy Canes 🍬", ephemeral: true });
+        return;
+      }
+  
+      addCandy(giverId, -amt);
+      addCandy(targetId, amt);
+  
+      const msg = `${getBanter("gift_success")}\nYou gave <@${targetId}> **${amt}** 🍬`;
+      await i.reply({ content: msg, ephemeral: false });
+    }
+  }
+
         const stolen = Math.min(t.candy, Math.floor(Math.random() * 4) + 2);
         addCandy(targetId, -stolen);
         addCandy(uID, stolen);
@@ -276,7 +435,32 @@ async function registerCommands() {
 
 client.once("ready", async () => {
   console.log(`🎄 Logged in as ${client.user.tag}`);
+
+  // register commands…
   await registerCommands();
+
+  const channelId = process.env.EVENT_CHANNEL_ID;
+  if (channelId) {
+    const channel = await client.channels.fetch(channelId);
+    const embed = new EmbedBuilder()
+      .setTitle("🎁 The Candy Heist")
+      .setDescription("Collect, gift, and steal Candy Canes. Use the buttons below.")
+      .setColor(0xE23C3B);
+
+    const row1 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("gift").setLabel("Gift").setEmoji("🎁").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("heist").setLabel("Heist").setEmoji("💀").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("snowball").setLabel("Snowball").setEmoji("❄️").setStyle(ButtonStyle.Secondary)
+    );
+    const row2 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("lock").setLabel("Lock Stocking").setEmoji("🔒").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("leaderboard").setLabel("Leaderboard").setEmoji("🏆").setStyle(ButtonStyle.Primary)
+    );
+
+    const msg = await channel.send({ embeds: [embed], components: [row1, row2] });
+    // optional: await msg.pin();
+    console.log("📌 Candy Heist panel posted.");
+  }
 });
 
 
