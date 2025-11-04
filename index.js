@@ -116,15 +116,14 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const userData = data.users[userId];
   if (userData && userData.nudgeOptOut) return;
 
-  // try env guild first, then fallback to passed-in guild, then any guild the bot is in
   let guild = null;
 
-  // 1) ENV guild
+  // 1) try env guild
   if (process.env.GUILD_ID) {
     guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
   }
 
-  // 2) fallback guild (from interaction.guild.id)
+  // 2) try the guild from this interaction (passed in)
   if (!guild && fallbackGuildId) {
     guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
   }
@@ -134,7 +133,9 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
     const guilds = await client.guilds.fetch().catch(() => null);
     if (guilds && guilds.size > 0) {
       const first = guilds.first();
-      guild = await client.guilds.fetch(first.id).catch(() => null);
+      if (first) {
+        guild = await client.guilds.fetch(first.id).catch(() => null);
+      }
     }
   }
 
@@ -145,6 +146,7 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
 
   await member.send(message).catch(() => {});
 }
+
 
 // --- DISCORD CLIENT ---
 const client = new Client({
@@ -347,8 +349,10 @@ client.on("interactionCreate", async (i) => {
 
         await dmIfAllowed(
           targetId,
-          `💀 You were heisted by <@${actorId}> and lost **${stolen}** 🍬 in **The Candy Heist**.`
+          `💀 You were heisted by <@${actorId}> and lost **${stolen}** 🍬 in **The Candy Heist**.`,
+          i.guild?.id
         );
+
       } else {
         addCandy(actorId, -5);
         const line = getBanter("mug_fail");
@@ -383,8 +387,10 @@ client.on("interactionCreate", async (i) => {
 
         await dmIfAllowed(
           targetId,
-          `❄️ You got snowballed by <@${actorId}> and dropped **${stolen}** 🍬 in **The Candy Heist**!`
+          `❄️ You got snowballed by <@${actorId}> and dropped **${stolen}** 🍬 in **The Candy Heist**!`,
+          i.guild?.id
         );
+
       } else {
         await i.update({
           content: "Your snowball missed and hit a reindeer 🦌",
@@ -424,8 +430,10 @@ client.on("interactionCreate", async (i) => {
 
       await dmIfAllowed(
         targetId,
-        `🎁 You got **${amount}** Candy Canes from <@${giverId}> in **The Candy Heist**!`
+        `🎁 You got **${amount}** Candy Canes from <@${giverId}> in **The Candy Heist**!`,
+        i.guild?.id
       );
+
     }
   }
 });
