@@ -447,28 +447,31 @@ client.once("ready", async () => {
         .setTitle("🎁 The Candy Heist")
         .setDescription("Collect, gift, and steal Candy Canes. Use the buttons below.")
         .setColor(0xE23C3B);
-      
+
       const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("gift").setLabel("Gift").setEmoji("🎁").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("heist").setLabel("Heist").setEmoji("💀").setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId("snowball").setLabel("Snowball").setEmoji("❄️").setStyle(ButtonStyle.Secondary)
       );
-      
+
       const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("lock").setLabel("Lock Stocking").setEmoji("🔒").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("leaderboard").setLabel("Leaderboard").setEmoji("🏆").setStyle(ButtonStyle.Primary)
       );
-      
-      // 👉 NEW ROW (for DM toggle, or future staff buttons)
+
+      // new row for DM toggle (or more controls)
       const row3 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("toggle_dm").setLabel("DMs: On/Off").setEmoji("📩").setStyle(ButtonStyle.Secondary)
-        // you can add more here, up to 5 per row
       );
-      
+
       await channel.send({
         embeds: [embed],
-        components: [row1, row2, row3]   // <— just add row3 here
+        components: [row1, row2, row3]
       });
 
+      console.log("📌 Candy Heist panel posted.");
+    }
+  }
+}); // <-- this closes client.once("ready", ...)
 
-client.login(TOKEN);
+client.login(TOKEN); // <-- this must be the last line
