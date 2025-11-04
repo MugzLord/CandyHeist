@@ -16,8 +16,7 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  UserSelectMenuBuilder
-} from "discord.js";
+  from "discord.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -223,15 +222,25 @@ client.on("interactionCreate", async (i) => {
 
     // 🎁 Gift → open user select
     if (id === "gift") {
+      const guild = await i.guild.fetch();
+      const members = await guild.members.fetch();
+      const humans = members.filter(m => !m.user.bot).first(25); // max 25 in a menu
+    
+      const options = humans.map(m => ({
+        label: m.displayName || m.user.username,
+        value: m.id,
+        description: `Gift ${m.user.username}`
+      }));
+    
       const row = new ActionRowBuilder().addComponents(
-        new UserSelectMenuBuilder()
-          .setCustomId("gift_select")
-          .setPlaceholder("Select someone to gift")
-          .setMinValues(1)
-          .setMaxValues(1)
+        new StringSelectMenuBuilder()
+          .setCustomId("gift_select_humans")
+          .setPlaceholder("Who do you want to gift? 🎁")
+          .addOptions(options)
       );
+    
       await i.reply({
-        content: "Who do you want to gift? 🎁",
+        content: "Pick someone to gift 🎁",
         components: [row],
         ephemeral: true
       });
@@ -240,13 +249,23 @@ client.on("interactionCreate", async (i) => {
 
     // 💀 Heist → open user select
     if (id === "heist") {
+      const guild = await i.guild.fetch();
+      const members = await guild.members.fetch();
+      const humans = members.filter(m => !m.user.bot).first(25);
+    
+      const options = humans.map(m => ({
+        label: m.displayName || m.user.username,
+        value: m.id,
+        description: `Heist ${m.user.username}`
+      }));
+    
       const row = new ActionRowBuilder().addComponents(
-        new UserSelectMenuBuilder()
-          .setCustomId("heist_select")
+        new StringSelectMenuBuilder()
+          .setCustomId("heist_select_humans")
           .setPlaceholder("Select a player to heist")
-          .setMinValues(1)
-          .setMaxValues(1)
+          .addOptions(options)
       );
+    
       await i.reply({
         content: "Pick someone to rob 👀",
         components: [row],
@@ -255,15 +274,26 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
+
     // ❄️ Snowball → open user select
     if (id === "snowball") {
+      const guild = await i.guild.fetch();
+      const members = await guild.members.fetch();
+      const humans = members.filter(m => !m.user.bot).first(25);
+    
+      const options = humans.map(m => ({
+        label: m.displayName || m.user.username,
+        value: m.id,
+        description: `Snowball ${m.user.username}`
+      }));
+    
       const row = new ActionRowBuilder().addComponents(
-        new UserSelectMenuBuilder()
-          .setCustomId("snowball_select")
+        new StringSelectMenuBuilder()
+          .setCustomId("snowball_select_humans")
           .setPlaceholder("Select a player to snowball")
-          .setMinValues(1)
-          .setMaxValues(1)
+          .addOptions(options)
       );
+    
       await i.reply({
         content: "Pick a target to snowball ❄️",
         components: [row],
@@ -271,6 +301,7 @@ client.on("interactionCreate", async (i) => {
       });
       return;
     }
+
 
     // 🔒 Lock
     if (id === "lock") {
@@ -303,12 +334,12 @@ client.on("interactionCreate", async (i) => {
   }
 
   // USER SELECTS
-  if (i.isUserSelectMenu()) {
+  if (i.isStringSelectMenu()) {
     const targetId = i.values[0];
     const actorId = i.user.id;
-
-    // 🎁 GIFT select → now ask for amount
-    if (i.customId === "gift_select") {
+  
+    // 🎁 GIFT (string select)
+    if (i.customId === "gift_select_humans") {
       const modal = new ModalBuilder()
         .setCustomId(`modal_gift_amount:${targetId}`)
         .setTitle("🎁 Gift amount")
@@ -324,12 +355,11 @@ client.on("interactionCreate", async (i) => {
       await i.showModal(modal);
       return;
     }
-
-    // 💀 HEIST select → do heist now
-    if (i.customId === "heist_select") {
+  
+    // 💀 HEIST (string select)
+    if (i.customId === "heist_select_humans") {
       const targetData = getUser(targetId);
-
-      // target broke
+  
       if ((targetData.candy || 0) === 0) {
         await i.update({
           content: "They had 0 🍬 — try someone richer 😏",
@@ -337,8 +367,7 @@ client.on("interactionCreate", async (i) => {
         });
         return;
       }
-
-      // target locked
+  
       if (isLocked(targetId)) {
         const line = getBanter("mug_fail");
         await i.update({
@@ -347,25 +376,24 @@ client.on("interactionCreate", async (i) => {
         });
         return;
       }
-
+  
       const success = Math.random() < 0.7;
       if (success) {
         const stolen = Math.max(1, Math.floor(targetData.candy * 0.25));
         addCandy(targetId, -stolen);
         addCandy(actorId, stolen);
         const line = getBanter("mug_success");
-
+  
         await i.update({
           content: `${line}\nYou stole **${stolen}** 🍬 from <@${targetId}>`,
           components: []
         });
-
+  
         await dmIfAllowed(
           targetId,
           `💀 You were heisted by <@${actorId}> and lost **${stolen}** 🍬 in **The Candy Heist**.`,
           i.guild?.id
         );
-
       } else {
         addCandy(actorId, -5);
         const line = getBanter("mug_fail");
@@ -374,43 +402,41 @@ client.on("interactionCreate", async (i) => {
           components: []
         });
       }
-
       return;
     }
-
-    // ❄️ SNOWBALL select
-    if (i.customId === "snowball_select") {
+  
+    // ❄️ SNOWBALL (string select)
+    if (i.customId === "snowball_select_humans") {
       const targetData = getUser(targetId);
       const hit =
         Math.random() < 0.5 && (targetData.candy || 0) > 0 && !isLocked(targetId);
-
+  
       if (hit) {
         const stolen = Math.min(
           targetData.candy,
-          Math.floor(Math.random() * 4) + 2 // 2–5
+          Math.floor(Math.random() * 4) + 2
         );
         addCandy(targetId, -stolen);
         addCandy(actorId, stolen);
         const line = getBanter("snowball");
-
+  
         await i.update({
           content: `${line}\nYou knocked **${stolen}** 🍬 off <@${targetId}>`,
           components: []
         });
-
+  
         await dmIfAllowed(
           targetId,
           `❄️ You got snowballed by <@${actorId}> and dropped **${stolen}** 🍬 in **The Candy Heist**!`,
           i.guild?.id
         );
-
       } else {
         await i.update({
           content: "Your snowball missed and hit a reindeer 🦌",
           components: []
         });
       }
-
+  
       return;
     }
   }
