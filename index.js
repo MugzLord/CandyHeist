@@ -146,16 +146,28 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
 
   if (!guild) {
     console.log(`[DM] No guild found to DM user ${userId}`);
-  }
-
-  const member = guild
-    ? await guild.members.fetch(userId).catch(() => null)
-    : null;
-  if (!member) {
-    // console.log(`[DM] User ${userId} not found in guild`);
     return;
   }
 
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member) {
+    console.log(`[DM] User ${userId} not found in guild ${guild.id}`);
+    return;
+  }
+
+  // open/create DM channel
+  const dm = await member.createDM().catch(() => null);
+  if (!dm) return;
+
+  // if we have a previous DM id, try to delete it
+  const lastDmId = userData?.lastDmId;
+  if (lastDmId) {
+    await dm.messages.delete(lastDmId).catch(() => {
+      // ignore if already gone / can't delete
+    });
+  }
+
+  // build the toggle row
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("toggle_dm")
@@ -164,14 +176,24 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  await member
+  // send the fresh DM
+  const sent = await dm
     .send({
       content: message,
       components: [row],
     })
     .catch((err) => {
       console.log(`[DM] Failed to DM ${userId}: ${err.message}`);
+      return null;
     });
+
+  // store the new DM id so next time we can delete it
+  if (sent) {
+    const newData = readDB();
+    if (!newData.users[userId]) newData.users[userId] = {};
+    newData.users[userId].lastDmId = sent.id;
+    writeDB(newData);
+  }
 }
 
 // send one random image from /images
