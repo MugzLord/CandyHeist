@@ -130,12 +130,12 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
     guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
   }
 
-  // 2) try the guild from the interaction (we pass it in)
+  // 2) try the guild from the interaction
   if (!guild && fallbackGuildId) {
     guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
   }
 
-  // 3) last resort: first guild the bot is in
+  // 3) last resort: first guild
   if (!guild) {
     const all = await client.guilds.fetch().catch(() => null);
     if (all && all.size > 0) {
@@ -150,33 +150,36 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   }
 
   const member = await guild.members.fetch(userId).catch(() => null);
-  if (!member) {
-    console.log(`[DM] User ${userId} not found in guild ${guild.id}`);
-    return;
-  }
+  if (!member) return;
 
-  // open/create DM channel
   const dm = await member.createDM().catch(() => null);
   if (!dm) return;
 
-  // if we have a previous DM id, try to delete it
+  // delete old DM from bot if we have it
   const lastDmId = userData?.lastDmId;
   if (lastDmId) {
-    await dm.messages.delete(lastDmId).catch(() => {
-      // ignore if already gone / can't delete
-    });
+    await dm.messages.delete(lastDmId).catch(() => {});
   }
 
-  // build the toggle row
+  // build buttons
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("toggle_dm")
-      .setLabel("DMs: On/Off")
-      .setEmoji("📩")
+      .setLabel(userData?.nudgeOptOut ? "DMs: Off" : "DMs: On")
+      .setEmoji(userData?.nudgeOptOut ? "📪" : "📩")
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // send the fresh DM
+  // if we know the channel, add a link button to it
+  if (GUILD_ID && EVENT_CHANNEL_ID) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setLabel("Open Heist")
+        .setStyle(ButtonStyle.Link)
+        .setURL(`https://discord.com/channels/${GUILD_ID}/${EVENT_CHANNEL_ID}`)
+    );
+  }
+
   const sent = await dm
     .send({
       content: message,
@@ -187,7 +190,6 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
       return null;
     });
 
-  // store the new DM id so next time we can delete it
   if (sent) {
     const newData = readDB();
     if (!newData.users[userId]) newData.users[userId] = {};
