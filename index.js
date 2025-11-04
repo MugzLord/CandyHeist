@@ -31,7 +31,7 @@ const __dirname = path.dirname(__filename);
 // ----------------------------------------------------
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID; // optional, for fast guild-only commands
+const GUILD_ID = process.env.GUILD_ID; // optional
 const EVENT_CHANNEL_ID = process.env.EVENT_CHANNEL_ID || null;
 const ADMIN_ROLE_ID = process.env.ADMIN_ROLE_ID || null;
 
@@ -40,6 +40,9 @@ const ADMIN_ROLE_ID = process.env.ADMIN_ROLE_ID || null;
 // ----------------------------------------------------
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "db.json");
 const BANTER_PATH = path.join(__dirname, "banter.json");
+
+// folder for random pics
+const IMAGES_DIR = path.join(__dirname, "images");
 
 const dbDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dbDir)) {
@@ -87,7 +90,7 @@ function getUser(id) {
   const data = readDB();
   if (!data.users[id]) {
     data.users[id] = {
-      candy: 25, // starter
+      candy: 25,
       lockedUntil: null,
       nudgeOptOut: false,
     };
@@ -118,7 +121,6 @@ function getBanter(cat) {
   const full = banter[cat] || ["[no banter]"];
   let remain = data.banter_state[cat];
   if (!remain || remain.length === 0) {
-    // reshuffle
     remain = [...full].sort(() => Math.random() - 0.5);
   }
   const line = remain.shift();
@@ -141,7 +143,7 @@ const client = new Client({
 });
 
 // ----------------------------------------------------
-// DM helper (now that client exists)
+// DM helper
 // ----------------------------------------------------
 async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const data = readDB();
@@ -150,17 +152,14 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
 
   let guild = null;
 
-  // 1) try env guild
   if (GUILD_ID) {
     guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
   }
 
-  // 2) try the guild we got from the interaction
   if (!guild && fallbackGuildId) {
     guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
   }
 
-  // 3) fallback to first guild
   if (!guild) {
     const guilds = await client.guilds.fetch().catch(() => null);
     if (guilds && guilds.size > 0) {
@@ -190,6 +189,33 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
       components: [row],
     })
     .catch(() => {});
+}
+
+// ----------------------------------------------------
+// helper: send random image to a channel
+// ----------------------------------------------------
+async function sendRandomImage(channel) {
+  try {
+    if (!fs.existsSync(IMAGES_DIR)) return;
+    const files = fs
+      .readdirSync(IMAGES_DIR)
+      .filter((f) =>
+        [".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(
+          path.extname(f).toLowerCase()
+        )
+      );
+
+    if (!files.length) return;
+
+    const rand = files[Math.floor(Math.random() * files.length)];
+    const filePath = path.join(IMAGES_DIR, rand);
+
+    await channel.send({
+      files: [filePath],
+    });
+  } catch (err) {
+    console.warn("Could not send random image:", err.message);
+  }
 }
 
 // ----------------------------------------------------
@@ -242,9 +268,7 @@ async function sendXmasPanel(interaction) {
 // INTERACTIONS
 // ----------------------------------------------------
 client.on("interactionCreate", async (i) => {
-  // --------------------------------------------------
-  // SLASH COMMANDS
-  // --------------------------------------------------
+  // SLASH
   if (i.isChatInputCommand()) {
     if (i.commandName === "xmas") {
       return sendXmasPanel(i);
@@ -280,13 +304,10 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // --------------------------------------------------
   // BUTTONS
-  // --------------------------------------------------
   if (i.isButton()) {
     const id = i.customId;
 
-    // toggle DMs
     if (id === "toggle_dm") {
       const userId = i.user.id;
       const userData = getUser(userId);
@@ -302,7 +323,6 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
-    // gift / heist / snowball buttons → open select menu
     if (id === "gift" || id === "heist" || id === "snowball") {
       const guild = i.guild;
       if (!guild) {
@@ -349,7 +369,6 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
-    // lock
     if (id === "lock") {
       const until = new Date(Date.now() + 15 * 60_000).toISOString();
       setUser(i.user.id, { lockedUntil: until });
@@ -358,7 +377,6 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
-    // leaderboard
     if (id === "leaderboard") {
       const data = readDB();
       const list = Object.entries(data.users)
@@ -386,14 +404,11 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // --------------------------------------------------
   // SELECT MENUS
-  // --------------------------------------------------
   if (i.isStringSelectMenu()) {
     const targetId = i.values[0];
     const actorId = i.user.id;
 
-    // gift menu
     if (i.customId === "gift_select_humans") {
       const modal = new ModalBuilder()
         .setCustomId(`modal_gift_amount:${targetId}`)
@@ -411,7 +426,6 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
-    // heist menu
     if (i.customId === "heist_select_humans") {
       const targetData = getUser(targetId);
 
@@ -460,7 +474,6 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
-    // snowball menu
     if (i.customId === "snowball_select_humans") {
       const targetData = getUser(targetId);
       const hit =
@@ -497,9 +510,7 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // --------------------------------------------------
   // MODALS
-  // --------------------------------------------------
   if (i.isModalSubmit()) {
     if (i.customId.startsWith("modal_gift_amount:")) {
       const targetId = i.customId.split(":")[1];
@@ -583,7 +594,6 @@ client.once("ready", async () => {
 
   await registerCommands();
 
-  // auto-post panel if channel set
   if (EVENT_CHANNEL_ID) {
     const channel = await client.channels.fetch(EVENT_CHANNEL_ID).catch(() => null);
     if (channel) {
@@ -635,6 +645,9 @@ client.once("ready", async () => {
         embeds: [embed],
         components: [row1, row2, row3],
       });
+
+      // 👇 send the random pic right after posting the panel
+      await sendRandomImage(channel);
 
       console.log("📌 Candy Heist panel posted.");
     }
