@@ -443,9 +443,18 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 async function registerCommands() {
   const commands = [
-    { name: "xmas", description: "Open The Candy Heist panel" },
-    { name: "xmas_admin", description: "(staff) view active Candy Heist players" }
-  ];
+  {
+    name: "xmas",
+    description: "Open The Candy Heist panel",
+    dm_permission: false   // ⬅️ DISABLE in DMs
+  },
+  {
+    name: "xmas_admin",
+    description: "(staff) view active Candy Heist players",
+    dm_permission: false   // admin command shouldn’t be in DMs either
+  }
+];
+
 
   try {
     if (GUILD_ID) {
