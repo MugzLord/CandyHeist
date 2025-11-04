@@ -26,21 +26,25 @@ const lastPanelMessages = new Map(); // key: channelId, value: messageId
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// --- ENV ---
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const EVENT_CHANNEL_ID = process.env.EVENT_CHANNEL_ID || null;
 const ADMIN_ROLE_ID = process.env.ADMIN_ROLE_ID || null;
 
+// --- FILE PATHS ---
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "db.json");
 const BANTER_PATH = path.join(__dirname, "banter.json");
 const IMAGES_DIR = path.join(__dirname, "images");
 
+// ensure dir for DB exists
 const dbDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
+// init db
 if (!fs.existsSync(DB_PATH)) {
   fs.writeFileSync(
     DB_PATH,
@@ -48,6 +52,7 @@ if (!fs.existsSync(DB_PATH)) {
   );
 }
 
+// --- BANTER ---
 let banter = {
   gift_success: ["Nice gift!"],
   mug_success: ["You pulled off the heist."],
@@ -63,6 +68,7 @@ try {
   console.warn("Could not load banter.json, using defaults.");
 }
 
+// --- DB HELPERS ---
 function readDB() {
   return JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
 }
@@ -76,6 +82,7 @@ function getUser(id) {
       candy: 25,
       lockedUntil: null,
       nudgeOptOut: false,
+      // lastDmId will be added later when we DM them
     };
     writeDB(data);
   }
@@ -108,6 +115,7 @@ function getBanter(cat) {
   return line;
 }
 
+// --- CLIENT ---
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -118,24 +126,23 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
+// --- DM HELPER (auto-delete + Open Heist) ---
 async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const data = readDB();
   const userData = data.users[userId];
-  if (userData && userData.nudgeOptOut) return; // user said no DMs
+  if (userData && userData.nudgeOptOut) return;
 
   let guild = null;
 
-  // 1) try env guild first
+  // try env guild
   if (GUILD_ID) {
     guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
   }
-
-  // 2) try the guild from the interaction
+  // try fallback
   if (!guild && fallbackGuildId) {
     guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
   }
-
-  // 3) last resort: first guild
+  // last resort
   if (!guild) {
     const all = await client.guilds.fetch().catch(() => null);
     if (all && all.size > 0) {
@@ -155,13 +162,12 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const dm = await member.createDM().catch(() => null);
   if (!dm) return;
 
-  // delete old DM from bot if we have it
-  const lastDmId = userData?.lastDmId;
-  if (lastDmId) {
-    await dm.messages.delete(lastDmId).catch(() => {});
+  // delete previous DM from us if we know it
+  if (userData?.lastDmId) {
+    await dm.messages.delete(userData.lastDmId).catch(() => {});
   }
 
-  // build buttons
+  // build row with toggle + link
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("toggle_dm")
@@ -170,7 +176,6 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // if we know the channel, add a link button to it
   if (GUILD_ID && EVENT_CHANNEL_ID) {
     row.addComponents(
       new ButtonBuilder()
@@ -191,14 +196,14 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
     });
 
   if (sent) {
-    const newData = readDB();
-    if (!newData.users[userId]) newData.users[userId] = {};
-    newData.users[userId].lastDmId = sent.id;
-    writeDB(newData);
+    const fresh = readDB();
+    if (!fresh.users[userId]) fresh.users[userId] = {};
+    fresh.users[userId].lastDmId = sent.id;
+    writeDB(fresh);
   }
 }
 
-// send one random image from /images
+// --- RANDOM IMAGE ---
 async function sendRandomImage(channel) {
   try {
     if (!fs.existsSync(IMAGES_DIR)) return;
@@ -218,7 +223,7 @@ async function sendRandomImage(channel) {
   }
 }
 
-// ⬇️ NEW: random loop — 35 to 75 mins between drops
+// random loop
 function startRandomImageLoop(channel) {
   async function loop() {
     const minMinutes = 35;
@@ -226,7 +231,6 @@ function startRandomImageLoop(channel) {
     const delayMinutes =
       Math.floor(Math.random() * (maxMinutes - minMinutes + 1)) + minMinutes;
     const delayMs = delayMinutes * 60 * 1000;
-
     await new Promise((res) => setTimeout(res, delayMs));
     await sendRandomImage(channel).catch(() => {});
     loop();
@@ -234,6 +238,7 @@ function startRandomImageLoop(channel) {
   loop();
 }
 
+// --- PANEL DISABLER ---
 async function disableOldPanel(channelId) {
   const msgId = lastPanelMessages.get(channelId);
   if (!msgId) return;
@@ -242,19 +247,19 @@ async function disableOldPanel(channelId) {
     const channel = await client.channels.fetch(channelId);
     const msg = await channel.messages.fetch(msgId);
 
-    const disabledComponents = msg.components.map((row) => {
-      return new ActionRowBuilder().addComponents(
+    const disabledComponents = msg.components.map((row) =>
+      new ActionRowBuilder().addComponents(
         row.components.map((c) => ButtonBuilder.from(c).setDisabled(true))
-      );
-    });
+      )
+    );
 
     await msg.edit({ components: disabledComponents });
-  } catch (err) {
+  } catch {
     // ignore
   }
 }
 
-// ✅ ONLY ONE VERSION OF THIS
+// --- /xmas panel ---
 async function sendXmasPanel(interaction) {
   await disableOldPanel(interaction.channel.id);
 
@@ -302,8 +307,9 @@ async function sendXmasPanel(interaction) {
   lastPanelMessages.set(interaction.channel.id, sent.id);
 }
 
+// --- INTERACTIONS ---
 client.on("interactionCreate", async (i) => {
-  // slash
+  // SLASH
   if (i.isChatInputCommand()) {
     if (i.commandName === "xmas") return sendXmasPanel(i);
     if (i.commandName === "xmas_admin") {
@@ -326,59 +332,125 @@ client.on("interactionCreate", async (i) => {
             }`
         )
         .join("\n");
+
       const embed = new EmbedBuilder()
         .setTitle("🎄 Candy Heist — Active Players")
         .setDescription(desc);
+
       return i.reply({ embeds: [embed], ephemeral: true });
     }
   }
 
-  // buttons
-  if (id === "toggle_dm") {
-    const userId = i.user.id;
-    const userData = getUser(userId);
-    const nowOptOut = !userData.nudgeOptOut;
-    setUser(userId, { nudgeOptOut: nowOptOut });
-  
-    // If clicked inside a server channel
-    if (i.inGuild()) {
-      await i.reply({
+  // BUTTONS
+  if (i.isButton()) {
+    const id = i.customId;
+
+    // DM toggle button
+    if (id === "toggle_dm") {
+      const userId = i.user.id;
+      const userData = getUser(userId);
+      const nowOptOut = !userData.nudgeOptOut;
+      setUser(userId, { nudgeOptOut: nowOptOut });
+
+      // clicked in a guild → ephemeral reply, don't edit channel message
+      if (i.inGuild()) {
+        await i.reply({
+          content: nowOptOut
+            ? "📪 Okay, I will stop DM’ing you for Candy Heist."
+            : "📬 DMs turned back on — you’ll get heist/gift notices again.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // clicked in DM → update the DM and KEEP the link
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("toggle_dm")
+          .setLabel(nowOptOut ? "DMs: Off" : "DMs: On")
+          .setEmoji(nowOptOut ? "📪" : "📩")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      if (GUILD_ID && EVENT_CHANNEL_ID) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setLabel("Open Heist")
+            .setStyle(ButtonStyle.Link)
+            .setURL(
+              `https://discord.com/channels/${GUILD_ID}/${EVENT_CHANNEL_ID}`
+            )
+        );
+      }
+
+      await i.update({
         content: nowOptOut
           ? "📪 Okay, I will stop DM’ing you for Candy Heist."
           : "📬 DMs turned back on — you’ll get heist/gift notices again.",
+        components: [row],
+      });
+      return;
+    }
+
+    // gift / heist / snowball buttons
+    if (id === "gift" || id === "heist" || id === "snowball") {
+      const guild = i.guild;
+      if (!guild) {
+        await i.reply({ content: "Use this in a server.", ephemeral: true });
+        return;
+      }
+
+      let members;
+      try {
+        members = await guild.members.fetch();
+      } catch (err) {
+        await i.reply({
+          content:
+            "I can't list members right now — make sure Server Members Intent is enabled for this bot.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const humans = members.filter((m) => !m.user.bot).first(25);
+      const options = humans.map((m) => ({
+        label: m.displayName || m.user.username,
+        value: m.id,
+        description:
+          id === "gift"
+            ? `Gift ${m.user.username}`
+            : id === "heist"
+            ? `Heist ${m.user.username}`
+            : `Snowball ${m.user.username}`,
+      }));
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`${id}_select_humans`)
+        .setPlaceholder(
+          id === "gift"
+            ? "Who do you want to gift? 🎁"
+            : id === "heist"
+            ? "Select a player to heist"
+            : "Select a player to snowball"
+        )
+        .addOptions(options);
+
+      const row = new ActionRowBuilder().addComponents(menu);
+
+      await i.reply({
+        content:
+          id === "gift"
+            ? "Pick someone to gift 🎁"
+            : id === "heist"
+            ? "Pick someone to rob 👀"
+            : "Pick a target to snowball ❄️",
+        components: [row],
         ephemeral: true,
       });
       return;
     }
-  
-    // If clicked inside a DM from the bot
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("toggle_dm")
-        .setLabel(nowOptOut ? "DMs: Off" : "DMs: On")
-        .setEmoji(nowOptOut ? "📪" : "📩")
-        .setStyle(ButtonStyle.Secondary)
-    );
-  
-    // Add Open Heist link (keep it even after toggling)
-    if (GUILD_ID && EVENT_CHANNEL_ID) {
-      row.addComponents(
-        new ButtonBuilder()
-          .setLabel("Open Heist")
-          .setStyle(ButtonStyle.Link)
-          .setURL(`https://discord.com/channels/${GUILD_ID}/${EVENT_CHANNEL_ID}`)
-      );
-    }
-  
-    await i.update({
-      content: nowOptOut
-        ? "📪 Okay, I will stop DM’ing you for Candy Heist."
-        : "📬 DMs turned back on — you’ll get heist/gift notices again.",
-      components: [row],
-    });
-    return;
-  }
 
+    // lock
     if (id === "lock") {
       const until = new Date(Date.now() + 15 * 60_000).toISOString();
       setUser(i.user.id, { lockedUntil: until });
@@ -387,34 +459,40 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
+    // leaderboard
     if (id === "leaderboard") {
       const data = readDB();
       const list = Object.entries(data.users)
         .filter(([, v]) => (v.candy || 0) > 0)
         .sort((a, b) => b[1].candy - a[1].candy)
         .slice(0, 10);
+
       if (!list.length) {
         await i.reply({ content: "No players yet 🎄", ephemeral: true });
         return;
       }
+
       const desc = list
         .map(
           ([uid, v], idx) => `**${idx + 1}.** <@${uid}> — ${v.candy} 🍬`
         )
         .join("\n");
+
       const embed = new EmbedBuilder()
         .setTitle("🏆 Candy Heist Leaderboard")
         .setDescription(desc);
+
       await i.reply({ embeds: [embed], ephemeral: true });
       return;
     }
   }
 
-  // select menus
+  // SELECT MENUS
   if (i.isStringSelectMenu()) {
     const targetId = i.values[0];
     const actorId = i.user.id;
 
+    // gift
     if (i.customId === "gift_select_humans") {
       const modal = new ModalBuilder()
         .setCustomId(`modal_gift_amount:${targetId}`)
@@ -432,6 +510,7 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
+    // heist
     if (i.customId === "heist_select_humans") {
       const targetData = getUser(targetId);
       if ((targetData.candy || 0) === 0) {
@@ -449,16 +528,19 @@ client.on("interactionCreate", async (i) => {
         });
         return;
       }
+
       const success = Math.random() < 0.7;
       if (success) {
         const stolen = Math.max(1, Math.floor(targetData.candy * 0.25));
         addCandy(targetId, -stolen);
         addCandy(actorId, stolen);
         const line = getBanter("mug_success");
+
         await i.update({
           content: `${line}\nYou stole **${stolen}** 🍬 from <@${targetId}>`,
           components: [],
         });
+
         await dmIfAllowed(
           targetId,
           `💀 You were heisted by <@${actorId}> and lost **${stolen}** 🍬 in **The Candy Heist**.`,
@@ -475,6 +557,7 @@ client.on("interactionCreate", async (i) => {
       return;
     }
 
+    // snowball
     if (i.customId === "snowball_select_humans") {
       const targetData = getUser(targetId);
       const hit =
@@ -490,10 +573,12 @@ client.on("interactionCreate", async (i) => {
         addCandy(targetId, -stolen);
         addCandy(actorId, stolen);
         const line = getBanter("snowball");
+
         await i.update({
           content: `${line}\nYou knocked **${stolen}** 🍬 off <@${targetId}>`,
           components: [],
         });
+
         await dmIfAllowed(
           targetId,
           `❄️ You got snowballed by <@${actorId}> and dropped **${stolen}** 🍬 in **The Candy Heist**!`,
@@ -509,7 +594,7 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // modals
+  // MODALS
   if (i.isModalSubmit()) {
     if (i.customId.startsWith("modal_gift_amount:")) {
       const targetId = i.customId.split(":")[1];
@@ -536,6 +621,7 @@ client.on("interactionCreate", async (i) => {
         content: `${line}\nYou gave <@${targetId}> **${amount}** 🍬`,
         ephemeral: false,
       });
+
       await dmIfAllowed(
         targetId,
         `🎁 You got **${amount}** Candy Canes from <@${giverId}> in **The Candy Heist**!`,
@@ -545,6 +631,7 @@ client.on("interactionCreate", async (i) => {
   }
 });
 
+// --- COMMAND REG ---
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 async function registerCommands() {
@@ -560,6 +647,7 @@ async function registerCommands() {
       dm_permission: false,
     },
   ];
+
   try {
     if (GUILD_ID) {
       await rest.put(
@@ -578,6 +666,7 @@ async function registerCommands() {
   }
 }
 
+// --- READY ---
 client.once("ready", async () => {
   console.log(`🎄 Logged in as ${client.user.tag}`);
   await registerCommands();
@@ -627,21 +716,18 @@ client.once("ready", async () => {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      // 1) grey the previous panel in this channel
+      // disable previous panel in that channel
       await disableOldPanel(channel.id);
 
-      // 2) send the new panel
       const sent = await channel.send({
         embeds: [embed],
         components: [row1, row2, row3],
       });
 
-      // 3) remember this as the latest panel
       lastPanelMessages.set(channel.id, sent.id);
 
-      // send 1 pic immediately
+      // send image + start loop
       await sendRandomImage(channel);
-      // and start the random loop
       startRandomImageLoop(channel);
 
       console.log("📌 Candy Heist panel posted + random image loop started.");
@@ -649,6 +735,7 @@ client.once("ready", async () => {
   }
 });
 
+// --- LOGIN ---
 if (!TOKEN) {
   console.error("❌ DISCORD_TOKEN not set");
   process.exit(1);
