@@ -20,6 +20,9 @@ import {
   StringSelectMenuBuilder,
 } from "discord.js";
 
+// keep track of the last Candy Heist panel per channel
+const lastPanelMessages = new Map(); // key: channelId, value: messageId
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -210,47 +213,75 @@ function startRandomImageLoop(channel) {
   loop();
 }
 
+async function disableOldPanel(channelId) {
+  const msgId = lastPanelMessages.get(channelId);
+  if (!msgId) return;
+
+  try {
+    const channel = await client.channels.fetch(channelId);
+    const msg = await channel.messages.fetch(msgId);
+
+    const disabledComponents = msg.components.map((row) => {
+      return new ActionRowBuilder().addComponents(
+        row.components.map((c) =>
+          ButtonBuilder.from(c).setDisabled(true)
+        )
+      );
+    });
+
+    await msg.edit({ components: disabledComponents });
+  } catch (err) {
+    // old message might be gone, no perms, etc. just ignore
+  }
+}
+
 async function sendXmasPanel(interaction) {
+  await disableOldPanel(interaction.channel.id);
+
   const embed = new EmbedBuilder()
     .setTitle("🎁 The Candy Heist")
     .setDescription("Collect, gift, and steal Candy Canes. Use the buttons below.")
     .setColor(0xe23c3b);
 
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("gift")
-      .setLabel("Gift")
-      .setEmoji("🎁")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId("heist")
-      .setLabel("Heist")
-      .setEmoji("💀")
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId("snowball")
-      .setLabel("Snowball")
-      .setEmoji("❄️")
-      .setStyle(ButtonStyle.Secondary)
+    // ... your buttons
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("lock")
-      .setLabel("Lock Stocking")
-      .setEmoji("🔒")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("leaderboard")
-      .setLabel("Leaderboard")
-      .setEmoji("🏆")
-      .setStyle(ButtonStyle.Primary)
+    // ... your buttons
   );
 
-  await interaction.reply({
+  const sent = await interaction.reply({
     embeds: [embed],
     components: [row1, row2],
+    fetchReply: true,   // important so we get the message ID
   });
+
+  lastPanelMessages.set(interaction.channel.id, sent.id);
 }
+async function sendXmasPanel(interaction) {
+  await disableOldPanel(interaction.channel.id);
+
+  const embed = new EmbedBuilder()
+    .setTitle("🎁 The Candy Heist")
+    .setDescription("Collect, gift, and steal Candy Canes. Use the buttons below.")
+    .setColor(0xe23c3b);
+
+  const row1 = new ActionRowBuilder().addComponents(
+    // ... your buttons
+  );
+  const row2 = new ActionRowBuilder().addComponents(
+    // ... your buttons
+  );
+
+  const sent = await interaction.reply({
+    embeds: [embed],
+    components: [row1, row2],
+    fetchReply: true,   // important so we get the message ID
+  });
+
+  lastPanelMessages.set(interaction.channel.id, sent.id);
+}
+
 
 client.on("interactionCreate", async (i) => {
   // slash
@@ -605,10 +636,17 @@ client.once("ready", async () => {
           .setStyle(ButtonStyle.Secondary)
       );
 
-      await channel.send({
+      // 1) grey the previous panel in this channel
+      await disableOldPanel(channel.id);
+      
+      // 2) send the new panel
+      const sent = await channel.send({
         embeds: [embed],
         components: [row1, row2, row3],
       });
+      
+      // 3) remember this as the latest panel
+      lastPanelMessages.set(channel.id, sent.id);
 
       // send 1 pic immediately
       await sendRandomImage(channel);
