@@ -275,20 +275,32 @@ client.on("interactionCreate", async (i) => {
   // buttons
   if (i.isButton()) {
     const id = i.customId;
-
+       
     if (id === "toggle_dm") {
       const userId = i.user.id;
       const userData = getUser(userId);
       const nowOptOut = !userData.nudgeOptOut;
       setUser(userId, { nudgeOptOut: nowOptOut });
-      await i.reply({
+    
+      // update button label dynamically
+      const newLabel = nowOptOut ? "DMs: Off" : "DMs: On";
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("toggle_dm")
+          .setLabel(newLabel)
+          .setEmoji(nowOptOut ? "📪" : "📩")
+          .setStyle(ButtonStyle.Secondary)
+      );
+    
+      await i.update({
         content: nowOptOut
           ? "📪 Okay, I will stop DM’ing you for Candy Heist."
           : "📬 DMs turned back on — you’ll get heist/gift notices again.",
-        ephemeral: true,
+        components: [row],
       });
       return;
     }
+
 
     if (id === "gift" || id === "heist" || id === "snowball") {
       const guild = i.guild;
