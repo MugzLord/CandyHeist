@@ -146,12 +146,13 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
 
   if (!guild) {
     console.log(`[DM] No guild found to DM user ${userId}`);
-    return;
   }
 
-  const member = await guild.members.fetch(userId).catch(() => null);
+  const member = guild
+    ? await guild.members.fetch(userId).catch(() => null)
+    : null;
   if (!member) {
-    console.log(`[DM] User ${userId} not found in guild ${guild.id}`);
+    // console.log(`[DM] User ${userId} not found in guild`);
     return;
   }
 
@@ -163,12 +164,14 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  await member.send({
-    content: message,
-    components: [row],
-  }).catch((err) => {
-    console.log(`[DM] Failed to DM ${userId}: ${err.message}`);
-  });
+  await member
+    .send({
+      content: message,
+      components: [row],
+    })
+    .catch((err) => {
+      console.log(`[DM] Failed to DM ${userId}: ${err.message}`);
+    });
 }
 
 // send one random image from /images
@@ -194,20 +197,14 @@ async function sendRandomImage(channel) {
 // ⬇️ NEW: random loop — 35 to 75 mins between drops
 function startRandomImageLoop(channel) {
   async function loop() {
-    // 35–75 mins
     const minMinutes = 35;
     const maxMinutes = 75;
     const delayMinutes =
       Math.floor(Math.random() * (maxMinutes - minMinutes + 1)) + minMinutes;
     const delayMs = delayMinutes * 60 * 1000;
 
-    // wait
     await new Promise((res) => setTimeout(res, delayMs));
-
-    // send image
     await sendRandomImage(channel).catch(() => {});
-
-    // repeat
     loop();
   }
   loop();
@@ -223,18 +220,17 @@ async function disableOldPanel(channelId) {
 
     const disabledComponents = msg.components.map((row) => {
       return new ActionRowBuilder().addComponents(
-        row.components.map((c) =>
-          ButtonBuilder.from(c).setDisabled(true)
-        )
+        row.components.map((c) => ButtonBuilder.from(c).setDisabled(true))
       );
     });
 
     await msg.edit({ components: disabledComponents });
   } catch (err) {
-    // old message might be gone, no perms, etc. just ignore
+    // ignore
   }
 }
 
+// ✅ ONLY ONE VERSION OF THIS
 async function sendXmasPanel(interaction) {
   await disableOldPanel(interaction.channel.id);
 
@@ -244,44 +240,43 @@ async function sendXmasPanel(interaction) {
     .setColor(0xe23c3b);
 
   const row1 = new ActionRowBuilder().addComponents(
-    // ... your buttons
+    new ButtonBuilder()
+      .setCustomId("gift")
+      .setLabel("Gift")
+      .setEmoji("🎁")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("heist")
+      .setLabel("Heist")
+      .setEmoji("💀")
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("snowball")
+      .setLabel("Snowball")
+      .setEmoji("❄️")
+      .setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
-    // ... your buttons
+    new ButtonBuilder()
+      .setCustomId("lock")
+      .setLabel("Lock Stocking")
+      .setEmoji("🔒")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId("leaderboard")
+      .setLabel("Leaderboard")
+      .setEmoji("🏆")
+      .setStyle(ButtonStyle.Primary)
   );
 
   const sent = await interaction.reply({
     embeds: [embed],
     components: [row1, row2],
-    fetchReply: true,   // important so we get the message ID
+    fetchReply: true,
   });
 
   lastPanelMessages.set(interaction.channel.id, sent.id);
 }
-async function sendXmasPanel(interaction) {
-  await disableOldPanel(interaction.channel.id);
-
-  const embed = new EmbedBuilder()
-    .setTitle("🎁 The Candy Heist")
-    .setDescription("Collect, gift, and steal Candy Canes. Use the buttons below.")
-    .setColor(0xe23c3b);
-
-  const row1 = new ActionRowBuilder().addComponents(
-    // ... your buttons
-  );
-  const row2 = new ActionRowBuilder().addComponents(
-    // ... your buttons
-  );
-
-  const sent = await interaction.reply({
-    embeds: [embed],
-    components: [row1, row2],
-    fetchReply: true,   // important so we get the message ID
-  });
-
-  lastPanelMessages.set(interaction.channel.id, sent.id);
-}
-
 
 client.on("interactionCreate", async (i) => {
   // slash
@@ -317,14 +312,13 @@ client.on("interactionCreate", async (i) => {
   // buttons
   if (i.isButton()) {
     const id = i.customId;
-       
+
     if (id === "toggle_dm") {
       const userId = i.user.id;
       const userData = getUser(userId);
       const nowOptOut = !userData.nudgeOptOut;
       setUser(userId, { nudgeOptOut: nowOptOut });
-    
-      // update button label dynamically
+
       const newLabel = nowOptOut ? "DMs: Off" : "DMs: On";
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -333,7 +327,7 @@ client.on("interactionCreate", async (i) => {
           .setEmoji(nowOptOut ? "📪" : "📩")
           .setStyle(ButtonStyle.Secondary)
       );
-    
+
       await i.update({
         content: nowOptOut
           ? "📪 Okay, I will stop DM’ing you for Candy Heist."
@@ -342,7 +336,6 @@ client.on("interactionCreate", async (i) => {
       });
       return;
     }
-
 
     if (id === "gift" || id === "heist" || id === "snowball") {
       const guild = i.guild;
@@ -638,13 +631,13 @@ client.once("ready", async () => {
 
       // 1) grey the previous panel in this channel
       await disableOldPanel(channel.id);
-      
+
       // 2) send the new panel
       const sent = await channel.send({
         embeds: [embed],
         components: [row1, row2, row3],
       });
-      
+
       // 3) remember this as the latest panel
       lastPanelMessages.set(channel.id, sent.id);
 
