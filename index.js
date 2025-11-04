@@ -118,28 +118,39 @@ const client = new Client({
 async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const data = readDB();
   const userData = data.users[userId];
-  if (userData && userData.nudgeOptOut) return;
+  if (userData && userData.nudgeOptOut) return; // user said no DMs
 
   let guild = null;
+
+  // 1) try env guild first
   if (GUILD_ID) {
     guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
   }
+
+  // 2) try the guild from the interaction (we pass it in)
   if (!guild && fallbackGuildId) {
     guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
   }
+
+  // 3) last resort: first guild the bot is in
   if (!guild) {
-    const guilds = await client.guilds.fetch().catch(() => null);
-    if (guilds && guilds.size > 0) {
-      const first = guilds.first();
-      if (first) {
-        guild = await client.guilds.fetch(first.id).catch(() => null);
-      }
+    const all = await client.guilds.fetch().catch(() => null);
+    if (all && all.size > 0) {
+      const first = all.first();
+      guild = await client.guilds.fetch(first.id).catch(() => null);
     }
   }
-  if (!guild) return;
+
+  if (!guild) {
+    console.log(`[DM] No guild found to DM user ${userId}`);
+    return;
+  }
 
   const member = await guild.members.fetch(userId).catch(() => null);
-  if (!member) return;
+  if (!member) {
+    console.log(`[DM] User ${userId} not found in guild ${guild.id}`);
+    return;
+  }
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -149,12 +160,12 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  await member
-    .send({
-      content: message,
-      components: [row],
-    })
-    .catch(() => {});
+  await member.send({
+    content: message,
+    components: [row],
+  }).catch((err) => {
+    console.log(`[DM] Failed to DM ${userId}: ${err.message}`);
+  });
 }
 
 // send one random image from /images
