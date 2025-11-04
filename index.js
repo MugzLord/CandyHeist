@@ -116,8 +116,6 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const data = readDB();
   const userData = data.users[userId];
-
-  // if user opted out, don't DM at all
   if (userData && userData.nudgeOptOut) return;
 
   let guild = null;
@@ -127,7 +125,7 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
     guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
   }
 
-  // 2) try guild from interaction
+  // 2) try the guild from this interaction
   if (!guild && fallbackGuildId) {
     guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
   }
@@ -148,7 +146,7 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member) return;
 
-  // build a DM-only row so user can toggle dm off/on
+  // DM with the toggle button
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("toggle_dm")
