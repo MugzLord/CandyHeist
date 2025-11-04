@@ -340,7 +340,7 @@ client.on("interactionCreate", async (i) => {
     const nowOptOut = !userData.nudgeOptOut;
     setUser(userId, { nudgeOptOut: nowOptOut });
   
-    // clicked from a server channel → keep the channel clean
+    // If clicked inside a server channel
     if (i.inGuild()) {
       await i.reply({
         content: nowOptOut
@@ -351,7 +351,7 @@ client.on("interactionCreate", async (i) => {
       return;
     }
   
-    // clicked inside the DM we sent → update the DM message
+    // If clicked inside a DM from the bot
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("toggle_dm")
@@ -360,7 +360,7 @@ client.on("interactionCreate", async (i) => {
         .setStyle(ButtonStyle.Secondary)
     );
   
-    // keep the "Open Heist" button in DMs
+    // Add Open Heist link (keep it even after toggling)
     if (GUILD_ID && EVENT_CHANNEL_ID) {
       row.addComponents(
         new ButtonBuilder()
@@ -378,7 +378,6 @@ client.on("interactionCreate", async (i) => {
     });
     return;
   }
-
 
     if (id === "lock") {
       const until = new Date(Date.now() + 15 * 60_000).toISOString();
