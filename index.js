@@ -110,10 +110,14 @@ function getBanter(cat) {
   return line;
 }
 
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+
 // send DM if user allows it
 async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const data = readDB();
   const userData = data.users[userId];
+
+  // if user opted out, don't DM at all
   if (userData && userData.nudgeOptOut) return;
 
   let guild = null;
@@ -123,12 +127,12 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
     guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
   }
 
-  // 2) try the guild from this interaction (passed in)
+  // 2) try guild from interaction
   if (!guild && fallbackGuildId) {
     guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
   }
 
-  // 3) last resort: first guild the bot is in
+  // 3) fallback: first guild the bot is in
   if (!guild) {
     const guilds = await client.guilds.fetch().catch(() => null);
     if (guilds && guilds.size > 0) {
@@ -144,9 +148,22 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member) return;
 
-  await member.send(message).catch(() => {});
-}
+  // build a DM-only row so user can toggle dm off/on
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("toggle_dm")
+      .setLabel("DMs: On/Off")
+      .setEmoji("📩")
+      .setStyle(ButtonStyle.Secondary)
+  );
 
+  await member
+    .send({
+      content: message,
+      components: [row]
+    })
+    .catch(() => {});
+}
 
 // --- DISCORD CLIENT ---
 const client = new Client({
