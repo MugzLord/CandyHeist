@@ -110,8 +110,6 @@ function getBanter(cat) {
   return line;
 }
 
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
-
 // send DM if user allows it
 async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const data = readDB();
@@ -125,7 +123,7 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
     guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
   }
 
-  // 2) try the guild from this interaction
+  // 2) try guild from the interaction
   if (!guild && fallbackGuildId) {
     guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
   }
@@ -146,7 +144,7 @@ async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member) return;
 
-  // DM with the toggle button
+  // DM with a toggle button
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("toggle_dm")
