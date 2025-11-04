@@ -334,76 +334,51 @@ client.on("interactionCreate", async (i) => {
   }
 
   // buttons
-  if (i.isButton()) {
-    const id = i.customId;
-
-    if (id === "toggle_dm") {
-      const userId = i.user.id;
-      const userData = getUser(userId);
-      const nowOptOut = !userData.nudgeOptOut;
-      setUser(userId, { nudgeOptOut: nowOptOut });
-
-      const newLabel = nowOptOut ? "DMs: Off" : "DMs: On";
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("toggle_dm")
-          .setLabel(newLabel)
-          .setEmoji(nowOptOut ? "📪" : "📩")
-          .setStyle(ButtonStyle.Secondary)
-      );
-
-      await i.update({
+  if (id === "toggle_dm") {
+    const userId = i.user.id;
+    const userData = getUser(userId);
+    const nowOptOut = !userData.nudgeOptOut;
+    setUser(userId, { nudgeOptOut: nowOptOut });
+  
+    // clicked from a server channel → keep the channel clean
+    if (i.inGuild()) {
+      await i.reply({
         content: nowOptOut
           ? "📪 Okay, I will stop DM’ing you for Candy Heist."
           : "📬 DMs turned back on — you’ll get heist/gift notices again.",
-        components: [row],
-      });
-      return;
-    }
-
-    if (id === "gift" || id === "heist" || id === "snowball") {
-      const guild = i.guild;
-      if (!guild)
-        return i.reply({ content: "Use this in a server.", ephemeral: true });
-
-      const members = await guild.members.fetch();
-      const humans = members.filter((m) => !m.user.bot).first(25);
-      const options = humans.map((m) => ({
-        label: m.displayName || m.user.username,
-        value: m.id,
-        description:
-          id === "gift"
-            ? `Gift ${m.user.username}`
-            : id === "heist"
-            ? `Heist ${m.user.username}`
-            : `Snowball ${m.user.username}`,
-      }));
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`${id}_select_humans`)
-        .setPlaceholder(
-          id === "gift"
-            ? "Who do you want to gift? 🎁"
-            : id === "heist"
-            ? "Select a player to heist"
-            : "Select a player to snowball"
-        )
-        .addOptions(options);
-
-      const row = new ActionRowBuilder().addComponents(menu);
-
-      await i.reply({
-        content:
-          id === "gift"
-            ? "Pick someone to gift 🎁"
-            : id === "heist"
-            ? "Pick someone to rob 👀"
-            : "Pick a target to snowball ❄️",
-        components: [row],
         ephemeral: true,
       });
       return;
     }
+  
+    // clicked inside the DM we sent → update the DM message
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("toggle_dm")
+        .setLabel(nowOptOut ? "DMs: Off" : "DMs: On")
+        .setEmoji(nowOptOut ? "📪" : "📩")
+        .setStyle(ButtonStyle.Secondary)
+    );
+  
+    // keep the "Open Heist" button in DMs
+    if (GUILD_ID && EVENT_CHANNEL_ID) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setLabel("Open Heist")
+          .setStyle(ButtonStyle.Link)
+          .setURL(`https://discord.com/channels/${GUILD_ID}/${EVENT_CHANNEL_ID}`)
+      );
+    }
+  
+    await i.update({
+      content: nowOptOut
+        ? "📪 Okay, I will stop DM’ing you for Candy Heist."
+        : "📬 DMs turned back on — you’ll get heist/gift notices again.",
+      components: [row],
+    });
+    return;
+  }
+
 
     if (id === "lock") {
       const until = new Date(Date.now() + 15 * 60_000).toISOString();
