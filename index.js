@@ -111,14 +111,33 @@ function getBanter(cat) {
 }
 
 // send DM if user allows it
-async function dmIfAllowed(userId, message) {
-  // need guild + user must not have opted out
+async function dmIfAllowed(userId, message, fallbackGuildId = null) {
   const data = readDB();
   const userData = data.users[userId];
   if (userData && userData.nudgeOptOut) return;
-  if (!GUILD_ID) return;
 
-  const guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
+  // try env guild first, then fallback to passed-in guild, then any guild the bot is in
+  let guild = null;
+
+  // 1) ENV guild
+  if (process.env.GUILD_ID) {
+    guild = await client.guilds.fetch(process.env.GUILD_ID).catch(() => null);
+  }
+
+  // 2) fallback guild (from interaction.guild.id)
+  if (!guild && fallbackGuildId) {
+    guild = await client.guilds.fetch(fallbackGuildId).catch(() => null);
+  }
+
+  // 3) last resort: first guild the bot is in
+  if (!guild) {
+    const guilds = await client.guilds.fetch().catch(() => null);
+    if (guilds && guilds.size > 0) {
+      const first = guilds.first();
+      guild = await client.guilds.fetch(first.id).catch(() => null);
+    }
+  }
+
   if (!guild) return;
 
   const member = await guild.members.fetch(userId).catch(() => null);
