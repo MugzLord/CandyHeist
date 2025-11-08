@@ -1,10 +1,7 @@
 // index.js
-// 🎁 The Candy Heist — discord.js v14 (ESM)
-
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { AttachmentBuilder, EmbedBuilder } from "discord.js";
 import {
   Client,
   GatewayIntentBits,
@@ -16,36 +13,35 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ModalBuilder,
-  TextInputBuilder,
   TextInputStyle,
   StringSelectMenuBuilder,
+  AttachmentBuilder,
 } from "discord.js";
 
 // keep track of the last Candy Heist panel per channel
-const lastPanelMessages = new Map(); // key: channelId, value: messageId
+const lastPanelMessages = new Map();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const filePath = path.join(__dirname, "Cat.png"); // file is in repo root
-const embed = new EmbedBuilder()
-  .setTitle("🍬 Cat")
+
+// PRE-BUILD YOUR IMAGE OBJECTS
+const catPath = path.join(__dirname, "assets", "Cat.png");
+const catEmbed = new EmbedBuilder()
+  .setTitle("🐱 Cat")
   .setDescription("Type **cat** to get candy!")
   .setImage("attachment://Cat.png");
 
 const treePath = path.join(__dirname, "assets", "Xmas Tree.png");
-const treeFile = new AttachmentBuilder(treePath);
 const treeEmbed = new EmbedBuilder()
-  .setTitle("🎄 Xmas Tree")
+  .setTitle("🎄 Xmas tree")
   .setDescription("Type **tree** to get candy!")
   .setImage("attachment://Xmas Tree.png");
 
-const snowPath = path.join(__dirname, "assets", "snoman.png");
-const snowFile = new AttachmentBuilder(snowPath);
+const snowPath = path.join(__dirname, "assets", "snoman.png"); // your file name
 const snowEmbed = new EmbedBuilder()
   .setTitle("⛄ Snowman")
   .setDescription("Type **snowman** to get candy!")
   .setImage("attachment://snoman.png");
-
 
 // --- ENV ---
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -343,11 +339,37 @@ async function sendXmasPanel(interaction) {
 client.on("interactionCreate", async (i) => {
   // SLASH
   if (i.isChatInputCommand()) {
-    if (i.commandName === "xmas") return sendXmasPanel(i);
+    if (i.commandName === "xmas") {
+      // send the images first
+      const catFile = new AttachmentBuilder(catPath);
+      await i.channel.send({
+        embeds: [catEmbed],
+        files: [catFile],
+      });
+  
+      const treeFile = new AttachmentBuilder(treePath);
+      await i.channel.send({
+        embeds: [treeEmbed],
+        files: [treeFile],
+      });
+  
+      const snowFile = new AttachmentBuilder(snowPath);
+      await i.channel.send({
+        embeds: [snowEmbed],
+        files: [snowFile],
+      });
+  
+      // then do your old behaviour
+      return sendXmasPanel(i);
+    }
+  
     if (i.commandName === "xmas_admin") {
       if (ADMIN_ROLE_ID && !i.member.roles.cache.has(ADMIN_ROLE_ID)) {
         return i.reply({ content: "No permission.", ephemeral: true });
       }
+    }
+
+
       const data = readDB();
       const list = Object.entries(data.users)
         .filter(([, v]) => (v.candy || 0) > 0)
