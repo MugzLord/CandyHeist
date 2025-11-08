@@ -4,6 +4,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { AttachmentBuilder, EmbedBuilder } from "discord.js";
 import {
   Client,
   GatewayIntentBits,
@@ -25,6 +26,26 @@ const lastPanelMessages = new Map(); // key: channelId, value: messageId
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const filePath = path.join(__dirname, "Cat.png"); // file is in repo root
+const embed = new EmbedBuilder()
+  .setTitle("🍬 Cat")
+  .setDescription("Type **cat** to get candy!")
+  .setImage("attachment://Cat.png");
+
+const treePath = path.join(__dirname, "assets", "Xmas Tree.png");
+const treeFile = new AttachmentBuilder(treePath);
+const treeEmbed = new EmbedBuilder()
+  .setTitle("🎄 Xmas Tree")
+  .setDescription("Type **tree** to get candy!")
+  .setImage("attachment://Xmas Tree.png");
+
+const snowPath = path.join(__dirname, "assets", "snoman.png");
+const snowFile = new AttachmentBuilder(snowPath);
+const snowEmbed = new EmbedBuilder()
+  .setTitle("⛄ Snowman")
+  .setDescription("Type **snowman** to get candy!")
+  .setImage("attachment://snoman.png");
+
 
 // --- ENV ---
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -43,6 +64,17 @@ const dbDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
+// added for images assets //
+const file = new AttachmentBuilder(filePath);
+const embed = new EmbedBuilder()
+  .setTitle("🍬 Cat")
+  .setDescription("Type **cat** to get candy!")
+  .setImage("attachment://Cat.png");
+
+await interaction.channel.send({
+  embeds: [embed],
+  files: [file],
+});
 
 // init db
 if (!fs.existsSync(DB_PATH)) {
